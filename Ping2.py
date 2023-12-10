@@ -113,8 +113,7 @@ def ping(host, times, timeout):
             if delay < minDelay:
                 minDelay = delay
     if countReply >= 1:
-        print("MaxDelay is %.3f ms\nMinDelay is %.3f ms\nAverageDelay  is %.3f ms" % (
-        maxDelay, minDelay, sumDelay / countReply))
+        print("MaxDelay is %.3f ms\nMinDelay is %.3f ms\nAverageDelay  is %.3f ms" % (maxDelay, minDelay, sumDelay / countReply))
         print("%d error occurs\n%d timeout occurs" % (countError, countTimeout))
 
 

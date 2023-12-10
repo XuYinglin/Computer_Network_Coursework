@@ -12,14 +12,16 @@ def handle_request(client_socket):
 
         try:
             with open(file_name, 'rb') as file:
-                response_content = file.read()
+                content = file.read()
             response_header = "HTTP/1.1 200 OK\r\n"
         except FileNotFoundError:
             response_header = "HTTP/1.1 404 Not Found\r\n"
-            response_content = b"File not found"
+            content = b"File not found"
 
-        server_header = "Server: 10.148.111.181\r\n\r\n"
-        response = response_header.encode() + server_header.encode() + response_content
+        _filecontent01 = "Server: 127.0.0.1\r\n"
+        _filecontent02 = content.decode()
+        response = response_header + _filecontent01 + "\r\n" + _filecontent02  # send the correct HTTP response
+        client_socket.sendall(response.encode(encoding="UTF-8"))
 
         client_socket.sendall(response)
     except Exception as e:
@@ -48,7 +50,7 @@ def start_server(server_address, server_port):
         server_socket.close()
 
 if __name__ == '__main__':
-    ip_address = "10.148.111.181"
+    ip_address = "127.0.0.1"
     port = 8000
     start_server(ip_address, port)
 

@@ -4,78 +4,58 @@ import socket
 import select
 import sys
 
-def sendRecvResend(tcpSocket, requestMes):
-	# print(requestMes)
+def send_recv_resend(_tcpsocket, _requestmes):
+	# print(_requestmes)
 	# Config Socket
-	des = requestMes.split("Host: ")[1].split("\r\n")[0]
+	des = _requestmes.split("Host: ")[1].split("\r\n")[0]
 	# print(des)
 	des = socket.gethostbyname(des)
 	# print(des)
-	toServerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	toServerSocket.connect((des, 80))
-	"""
-	# Set request packet
-	status = requestMes.split("\r\n")[0]
-	if len(requestMes.split("\r\n\r\n")) >= 2:
-		data = requestMes.split("\r\n\r\n")[1]
-	else:
-		data = ""
-	print(status, data)
-	request = status + "\r\n\r\n" + data
-	"""
+	_toserversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	_toserversocket.connect((des, 80))
 	# Send request to web server
-	toServerSocket.send(requestMes.encode())
+	_toserversocket.send(_requestmes.encode())
 	# Receive response
-	ready = select.select([toServerSocket], [], [], 2)
+	ready = select.select([_toserversocket], [], [], 2)
 	if ready[0] == []:
 		print("timeout")
 	else:
-		response = toServerSocket.recv(1024)
+		response = _toserversocket.recv(1024)
 		# print(response)
 		# Send response to client
-		tcpSocket.send(response)
-	toServerSocket.close()
+		_tcpsocket.send(response)
+	_toserversocket.close()
 
-def handleRequest(tcpSocket):
+def handle_request(_tcpsocket):
 	""" Determining the Request Type and Do Corresponding Operation"""
 	# Receive request message
-	requestMes = tcpSocket.recv(1024).decode()
-	if requestMes[0:3] == "GET":
-		"""
-		# Get url
-		path = ""
-		for i in requestMes[5:]:
-			if i == " ":
-				break
-			path += i
-		# If in cash
-		# If not in cash
-		"""
-		sendRecvResend(tcpSocket, requestMes)
-	elif requestMes[0:3] == "PUT":
-		sendRecvResend(tcpSocket, requestMes)
-	elif requestMes[0:6] == "DELETE":
-		sendRecvResend(tcpSocket, requestMes)
+	_requestmes = _tcpsocket.recv(1024).decode()
+	if _requestmes[0:3] == "GET":
+		send_recv_resend(_tcpsocket, _requestmes)
+	elif _requestmes[0:3] == "PUT":
+		send_recv_resend(_tcpsocket, _requestmes)
+	elif _requestmes[0:6] == "DELETE":
+		send_recv_resend(_tcpsocket, _requestmes)
 	else:
-		# print(requestMes[0:7])
+		# print(_requestmes[0:7])
 		print("Unsupported request type")
 	# Close socket
-	tcpSocket.close()
+	_tcpsocket.close()
 
 
-def startWebProxy(proxyPort = 8000):
-	proxyPort = int(proxyPort, 10)
+def start_web_proxy(_proxyport = 8000):
+	_proxyport = int(_proxyport, 10)
 	# Create TCP socket
-	proxySocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	_proxysocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	# Bind address port
-	proxySocket.bind(("10.148.111.181", proxyPort))
+	_proxysocket.bind(("127.0.0.1", _proxyport))
 	# Listen for connections
-	proxySocket.listen(1)
+	_proxysocket.listen(1)
 	print("The server is ready to receive")
 	while True:
-		connectionSocket, addr = proxySocket.accept()
-		handleRequest(connectionSocket)
-	proxySocket.close()
+		_connectionsocket, addr = _proxysocket.accept()
+		handle_request(_connectionsocket)
+	_proxysocket.close()
 
-proxyPort = input("Please config port: ")
-startWebProxy(proxyPort)
+_proxyport = input("Please config port: ")
+start_web_proxy(_proxyport)
