@@ -15,6 +15,7 @@ ICMP_ECHO_HOST_UNREACHABLE = 1
 ICMP_ECHO_NETWORK_UNREACHABLE = 0
 ICMP_ECHO_PROTOCOL_UNREACHABLE = 2
 ICMP_TYPE_UNREACHABLE = 3
+TIME_OUT = "time out"
 
 def calculate__checksum(strings):
     csum = 0
@@ -44,7 +45,7 @@ def parsemessage(_endreceivetime,_recedata,ID,timeout):
     _replytype, _replycode, _replyckecksum, _replyid, _replysequence = struct.unpack('!bbHHh', rec_header)
     # 5. Check that the ID matches between the request and reply
     if delay > timeout*1000:
-        return 0, "time out"
+        return 0, TIME_OUT
     if _replyid == ID and _replytype == ICMP_ECHO_REPLY:
         # 6. Return total network delay
         return delay , ""
@@ -57,7 +58,7 @@ def parsemessage(_endreceivetime,_recedata,ID,timeout):
     elif _replytype == ICMP_TYPE_UNREACHABLE and _replycode == ICMP_ECHO_PROTOCOL_UNREACHABLE:
         return 0, "PROTOCOL_UNREACHABLE"
     else:
-        return 0,  "time out"
+        return 0,  TIME_OUT
 
 
 
@@ -109,7 +110,7 @@ def ping(host, times, timeout):
         if delay == 0:
             # Analyse error causes
             packetloss = "request time out and packetloss"
-            time_out = "time out"
+            time_out = TIME_OUT
             if errortype == packetloss or time_out:
                 print(errortype)
                 _counttimeout += 1
