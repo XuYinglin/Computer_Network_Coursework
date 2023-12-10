@@ -35,7 +35,7 @@ def calculate__checksum(strings):
     answer = answer >> 8 | (answer << 8 & 0xff00)
     return answer
 
-def parsemessage(_endreceivetime,_recedata,ID):
+def parsemessage(_endreceivetime,_recedata,ID,timeout):
     byte_in_double = struct.calcsize("!d")
     senttime = struct.unpack("!d", _recedata[28: 28 + byte_in_double])[0]
     delay = (_endreceivetime - senttime) *1000
@@ -43,6 +43,8 @@ def parsemessage(_endreceivetime,_recedata,ID):
     rec_header = _recedata[20:28]
     _replytype, _replycode, _replyckecksum, _replyid, _replysequence = struct.unpack('!bbHHh', rec_header)
     # 5. Check that the ID matches between the request and reply
+    if delay > timeout*1000:
+        return 0, "time out"
     if _replyid == ID and _replytype == ICMP_ECHO_REPLY:
         # 6. Return total network delay
         return delay , ""
@@ -61,7 +63,6 @@ def parsemessage(_endreceivetime,_recedata,ID):
 
 def receiveping(_icmpsocket, ID, timeout):
     _whatready = select.select([_icmpsocket], [], [], timeout)
-    _icmpsocket.settimeout(5)
     _endreceivetime = time.time()
     try:
         _recedata, addr = _icmpsocket.recvfrom(1024)
@@ -69,10 +70,9 @@ def receiveping(_icmpsocket, ID, timeout):
         delay = 0
         errortype = "request time out and packetloss"
     else:
+        delay, errortype = parsemessage(_endreceivetime,_recedata,ID,timeout)
         if _whatready[0] == []:
             delay = 0
-        else:
-            delay, errortype = parsemessage(_endreceivetime,_recedata,ID)
     return delay,errortype
 
 def create_icmp_packet(ID, seq):
@@ -100,6 +100,7 @@ def ping(host, times, timeout):
         # Call do one ping function
         icmp = socket.getprotobyname("icmp")
         s = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
+        s.settimeout(5)
         ID = int(random.random() * 100)
         packet = create_icmp_packet(ID,seq)
         s.sendto(packet, (host, 2000))
