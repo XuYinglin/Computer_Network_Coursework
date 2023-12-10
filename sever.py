@@ -18,7 +18,7 @@ def handle_request(client_socket):
             response_header = "HTTP/1.1 404 Not Found\r\n"
             response_content = b"File not found"
 
-        server_header = "Server: 192.168.43.192\r\n\r\n"
+        server_header = "Server: 10.148.111.181\r\n\r\n"
         response = response_header.encode() + server_header.encode() + response_content
 
         client_socket.sendall(response)
@@ -48,7 +48,7 @@ def start_server(server_address, server_port):
         server_socket.close()
 
 if __name__ == '__main__':
-    ip_address = "192.168.43.192"
+    ip_address = "10.148.111.181"
     port = 8000
     start_server(ip_address, port)
 

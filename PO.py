@@ -68,7 +68,7 @@ def startWebProxy(proxyPort = 8000):
 	# Create TCP socket
 	proxySocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	# Bind address port
-	proxySocket.bind(("192.168.43.192", proxyPort))
+	proxySocket.bind(("10.148.111.181", proxyPort))
 	# Listen for connections
 	proxySocket.listen(1)
 	print("The server is ready to receive")

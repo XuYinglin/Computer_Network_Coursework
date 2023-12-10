@@ -67,7 +67,7 @@ def create_icmp_packet(ID, seq):
     return header + data
 
 
-def ping(host, times=4, timeout=1):
+def ping(host, times, timeout):
     # Store result
     sumDelay = 0.0
     maxDelay = 0.0
