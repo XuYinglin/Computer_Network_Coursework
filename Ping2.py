@@ -1,124 +1,161 @@
-#!/usr/bin/env python3
+#!/usr/bin/python
 # -*- coding: UTF-8 -*-
 
-import socket
+import os
 import struct
 import time
 import select
-import random
+import socket
 
 ICMP_ECHO_REQUEST = 8  # ICMP type code for echo request messages
 ICMP_ECHO_REPLY = 0  # ICMP type code for echo reply messages
-ICMP_ECHO_ERROR = 3
-ICMP_ECHO_HOST_UNREACHABLE = 1
-ICMP_ECHO_NETWORK_UNREACHABLE = 0
-ICMP_ECHO_PROTOCOL_UNREACHABLE = 2
-ICMP_ECHO_PORT_UNREACHABLE = 3
+ICMP_Type_Unreachable = 11  # unacceptable host
+ICMP_Type_Overtime = 3  # request overtime
+ID = 0  # ID of icmp_header
+SEQUENCE = 0  # sequence of ping_request_msg
 
-def calculate_checksum(string):
+
+def checksum(strings):
     csum = 0
-    countTo = (len(string) // 2) * 2
+    countTo = (len(strings) / 2) * 2
     count = 0
     while count < countTo:
-        thisVal = string[count + 1] * 256 + string[count]
+        thisVal = strings[count + 1] * 256 + strings[count]
         csum = csum + thisVal
         csum = csum & 0xffffffff
         count = count + 2
-    if countTo < len(string):
-        csum = csum + string[len(string) - 1]
+    if countTo < len(strings):
+        csum = csum + strings[len(strings) - 1]
         csum = csum & 0xffffffff
     csum = (csum >> 16) + (csum & 0xffff)
     csum = csum + (csum >> 16)
     answer = ~csum
     answer = answer & 0xffff
     answer = answer >> 8 | (answer << 8 & 0xff00)
-    answer = socket.htons(answer)
     return answer
 
 
-def receivePing(icmpSocket, ID, seq, timeout):
+def receiveOnePing(icmpSocket, ID, timeout):
+    # 1. Wait for the socket to receive a reply
+    timeBeginReceive = time.time()
     whatReady = select.select([icmpSocket], [], [], timeout)
-    Endreceive = time.time()
-    if whatReady[0] == []:
-        return -1.0, True, -1
-    receData, addr = icmpSocket.recvfrom(1024)
-    # get other info
-    icmpHeader = receData[20:28]
-    type, code, checksum, ID, sequence = struct.unpack("BBHHH", icmpHeader)
-    # if error
-    if type == ICMP_ECHO_ERROR:
-        return -1.0,True,code
-    # if match ID and seq
-    if ID == ID and sequence == seq and code == ICMP_ECHO_REPLY:
-        icmpData = receData[28:36]
-        sendTime = struct.unpack("d", icmpData)
-        delay = (Endreceive- sendTime[0]) * 1000
-        print("From", addr[0], "reply")
-        return delay,False,-1
+    timeInRecev = time.time() - timeBeginReceive
+    if not whatReady[0]:
+        return -1
+    timeReceived = time.time()
+    # 2. Once received, record time of receipt, otherwise, handle a timeout
+    recPacket, addr = icmpSocket.recvfrom(1024)
+    # 3. Compare the time of receipt to time of sending, producing the total network delay
+    byte_in_double = struct.calcsize("!d")
+    timeSent = struct.unpack("!d", recPacket[28: 28 + byte_in_double])[0]
+    print(timeSent)
+    print("\n")
+    print(timeReceived)
+    print("\n")
+    totalDelay = timeReceived - timeSent
+    # 4. Unpack the packet header for useful information, including the ID
+    rec_header = recPacket[20:28]
+    replyType, replyCode, replyCkecksum, replyId, replySequence = struct.unpack('!bbHHh', rec_header)
+    # 5. Check that the ID matches between the request and reply
+    if ID == replyId and replyType == ICMP_ECHO_REPLY:
+        # 6. Return total network delay
+        return totalDelay
+    elif timeInRecev > timeout or replyType == ICMP_Type_Overtime:
+        return -3  # ttl overtime/timeout
+    elif replyType == ICMP_Type_Unreachable:
+        return -11  # unreachable
+    else:
+        print("request over time")
+        return -1
 
 
-def create_icmp_packet(ID, seq):
-    header = struct.pack("BBHHH", ICMP_ECHO_REQUEST, 0, 0, ID, seq)
-    startTime = time.time()
-    data = struct.pack("d", startTime)
-    # print(startTime)
-    checkSum = calculate_checksum(header + data)
-    header = struct.pack("BBHHH", ICMP_ECHO_REQUEST, 0, checkSum, ID, seq)
-    return header + data
+def sendOnePing(icmpSocket, destinationAddress, ID):
+    icmp_checksum = 0
+    # 1. Build ICMP header
+    icmp_header = struct.pack('!bbHHh', ICMP_ECHO_REQUEST, 0, icmp_checksum, ID, SEQUENCE)
+    time_send = struct.pack('!d', time.time())
+    # 2. Checksum ICMP packet using given function
+    icmp_checksum = checksum(icmp_header + time_send)
+    # 3. Insert checksum into packet
+    icmp_header = struct.pack('!bbHHh', ICMP_ECHO_REQUEST, 0, icmp_checksum, ID, SEQUENCE)
+    # 4. Send packet using socket
+    icmp_packet = icmp_header + time_send
+    icmpSocket.sendto(icmp_packet, (destinationAddress, 80))
 
 
-def ping(host, times, timeout):
-    # Store result
-    sumDelay = 0.0
-    maxDelay = 0.0
-    minDelay = 1000.0
-    countReply = 0
-    countTimeout = 0
-    countError = 0
-    # Resolving ip
+def doOnePing(destinationAddress, timeout):
+    # 1. Create ICMP socket
+    icmpName = socket.getprotobyname('icmp')
+    icmp_Socket = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmpName)
+    # 2. Call sendOnePing function
+    sendOnePing(icmp_Socket, destinationAddress, ID)
+    # 3. Call receiveOnePing function
+    totalDelay = receiveOnePing(icmp_Socket, ID, timeout)
+    # 4. Close ICMP socket
+    icmp_Socket.close()
+    # 5. Return total network delay
+    return totalDelay
+
+
+def ping(host, count, timeout):
+    send = 0
+    lost = 0
+    receive = 0
+    maxTime = 0
+    minTime = 1000
+    sumTime = 0
+    # 1. Look up hostname, resolving it to an IP address
     desIp = socket.gethostbyname(host)
-    for seq in range(0, times):
-        # Call do one ping function
-        icmp = socket.getprotobyname("icmp")
-        s = socket.socket(socket.AF_INET, socket.SOCK_RAW, icmp)
-        ID = int(random.random() * 100)
-        packet = create_icmp_packet(ID,seq)
-        s.sendto(packet, (host, 2000))
-        delay, error_occurs, errorCode = receivePing(s, ID, seq, timeout)
-        s.close()
-        if error_occurs == True:
-            # Analyse error causes
-            if errorCode == -1:
-                print("timeout occurs")
-                countTimeout += 1
-            elif errorCode == ICMP_ECHO_ERRORCODE_HOST:
-                print("Host Unreachable")
-                countError += 1
-            elif errorCode == ICMP_ECHO_ERRORCODE_PORT:
-                print("Port Unreachable")
-                countError += 1
-            elif errorCode == ICMP_ECHO_ERRORCODE_PROTOCOL:
-                print("Protocol Unreachable")
-                countError += 1
-            else:
-                print("Unknown Error occurs")
-                countError += 1
+    global ID
+    ID = os.getpid()
+    for i in range(0, count):
+        global SEQUENCE
+        SEQUENCE = i
+        # 2. Call doOnePing function, approximately every second
+        delay = doOnePing(desIp, timeout) * 1000
+        send += 1
+        if delay > 0:
+            receive += 1
+            if maxTime < delay:
+                maxTime = delay
+            if minTime > delay:
+                minTime = delay
+            sumTime += delay
+            # 3. Print out the returned delay
+            print("Receive from: " + str(desIp) + ", delay = " + str(int(delay)) + "ms")
         else:
-            # Analyse
-            print("delay is %.3f ms" % delay)
-            countReply += 1
-            sumDelay += delay
-            if delay > maxDelay:
-                maxDelay = delay
-            if delay < minDelay:
-                minDelay = delay
-    if countReply >= 1:
-        print("MaxDelay is %.3f ms\nMinDelay is %.3f ms\nAverageDelay  is %.3f ms" % (maxDelay, minDelay, sumDelay / countReply))
-        print("%d error occurs\n%d timeout occurs" % (countError, countTimeout))
+            lost += 1
+            print("Fail to connect. ", end="")
+            if delay == -11:
+                # type = 11, target unreachable
+                print("Target net/host/port/protocol is unreachable.")
+            elif delay == -3:
+                # type = 3, ttl overtime
+                print("Request overtime.")
+            else:
+                # otherwise, overtime
+                print("Request overtime.")
+        time.sleep(1)
+    # 4. Continue this process until stopped
+    if receive != 0:
+        avgTime = sumTime / receive
+        recvRate = receive / send * 100.0
+        print(
+            "\nSend: {0}, success: {1}, lost: {2}, rate of success: {3}%.".format(send, receive, lost, recvRate))
+        print(
+            "MaxTime = {0}ms, MinTime = {1}ms, AvgTime = {2}ms".format(int(maxTime), int(minTime), int(avgTime)))
+    else:
+        print("\nSend: {0}, success: {1}, lost: {2}, rate of success: 0.0%".format(send, receive, lost))
 
 
-# Config para: times, timeout
-host = input("Where do you want to ping?")
-times = int(input("How many times? "))
-timeout = int(input("Please determine timeout: "))
-ping(host, times, timeout)
+if __name__ == '__main__':
+    while True:
+        try:
+            hostName = input("Input ip/name of the host you want: ")
+            count = int(input("How many times you want to detect: "))
+            timeout = int(input("Input timeout: "))
+            ping(hostName, count, timeout)
+            break
+        except Exception as e:
+            print(e)
+            continue
